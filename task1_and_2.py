@@ -10,12 +10,13 @@ def parse_input(user_input: str):
     return parts[0].lower(), parts[1:]
 
 
-#Обробки помилок
+# Обробка помилок
 def input_error(func):
     def wrapper(*args, **kwargs):
         try:
             return func(*args, **kwargs)
         except ValueError as e:
+            # Якщо ми самі кидали ValueError з повідомленням — показуємо його
             return str(e) if str(e) else "Invalid arguments. Check command syntax."
         except KeyError:
             return "Contact not found."
@@ -23,7 +24,8 @@ def input_error(func):
             return "Enter the argument for the command."
     return wrapper
 
-#Classes for contact management
+
+# Класи для роботи з контактами
 
 class Field:
     def __init__(self, value):
@@ -40,14 +42,16 @@ class Name(Field):
 class Phone(Field):
     def __init__(self, value: str):
         v = str(value)
+        # Валідація: тільки цифри і довжина 10
         if not (v.isdigit() and len(v) == 10):
             raise ValueError("Phone must contain exactly 10 digits.")
         super().__init__(v)
 
-# створюємо клас для дня народження
+
 class Birthday(Field):
     def __init__(self, value: str):
         try:
+            # Перевірка формату DD.MM.YYYY і конвертація в date
             dt = datetime.strptime(value, "%d.%m.%Y").date()
         except ValueError:
             raise ValueError("Invalid date format. Use DD.MM.YYYY")
@@ -61,7 +65,7 @@ class Record:
     def __init__(self, name: str):
         self.name = Name(name)
         self.phones: list[Phone] = []
-        self.birthday: Birthday | None = None
+        self.birthday: Birthday | None = None  # не обов'язково, тільки одне
 
     def add_phone(self, phone_value: str) -> None:
         self.phones.append(Phone(phone_value))
@@ -86,7 +90,7 @@ class Record:
                 return p
         return None
 
-    # створюємо "категорію" - день народження
+    # додавання дня народження
     def add_birthday(self, birthday_str: str) -> None:
         self.birthday = Birthday(birthday_str)
 
@@ -105,12 +109,13 @@ class AddressBook(UserDict):
 
     def delete(self, name: str) -> bool:
         return self.data.pop(name, None) is not None
-    
-    #робота з днями народженнями
+
+    # робота з днями народження
     def get_upcoming_birthdays(self) -> list[dict]:
         today = date.today()
         next_week_end = today + timedelta(days=7)
 
+        # сюди складаємо: день_тижня -> [імена]
         bucket: dict[str, list[str]] = {}
 
         for record in self.data.values():
@@ -120,32 +125,35 @@ class AddressBook(UserDict):
             bday: date = record.birthday.value
             birthday_this_year = bday.replace(year=today.year)
 
+            # якщо в цьому році вже пройшов — переносимо на наступний
             if birthday_this_year < today:
                 birthday_this_year = bday.replace(year=today.year + 1)
 
+            # якщо день народження в межах наступних 7 днів
             if today <= birthday_this_year <= next_week_end:
                 congrats_day = birthday_this_year
-                # перенос вихідних на понеділок
-                if congrats_day.weekday() == 5:
+
+                # перенос привітання з вихідних на понеділок
+                if congrats_day.weekday() == 5:   # Saturday
                     congrats_day = congrats_day + timedelta(days=2)
-                elif congrats_day.weekday() == 6:
+                elif congrats_day.weekday() == 6:  # Sunday
                     congrats_day = congrats_day + timedelta(days=1)
 
                 day_name = congrats_day.strftime("%A")
                 bucket.setdefault(day_name, []).append(record.name.value)
 
-        # Перетворимо в потрібний список словників (і відсортуємо дні календарно від сьогодні)
-        ordered = []
+        # формуємо впорядкований список тільки тих днів,
+        # де є іменинники, у порядку від сьогодні на 7 днів
+        ordered: list[dict[str, list[str]]] = []
         for i in range(7):
             d = (today + timedelta(days=i)).strftime("%A")
             if d in bucket:
                 ordered.append({d: sorted(bucket[d])})
-            if all(d not in m for m in ordered):
-                ordered.append({d: sorted(names)})
 
         return ordered
 
 
+# ---------- Команди бота ----------
 
 @input_error
 def add_contact(args, book: AddressBook):
@@ -194,7 +202,7 @@ def add_birthday(args, book: AddressBook):
     name, bday_str, *_ = args
     rec = book.find(name)
     if rec is None:
-        # дозволимо створювати новий контакт одразу з днем народження
+        # дозволяємо створювати новий контакт одразу з днем народження
         rec = Record(name)
         book.add_record(rec)
     rec.add_birthday(bday_str)
@@ -224,7 +232,6 @@ def birthdays(args, book: AddressBook):
     return "\n".join(lines)
 
 
-
 def main():
     book = AddressBook()
     print("Welcome to the assistant bot!")
@@ -235,22 +242,31 @@ def main():
         if command in ("close", "exit"):
             print("Good bye!")
             break
+
         elif command == "hello":
             print("How can I help you?")
+
         elif command == "add":
             print(add_contact(args, book))
+
         elif command == "change":
             print(cmd_change(args, book))
+
         elif command == "phone":
             print(cmd_phone(args, book))
+
         elif command == "all":
             print(cmd_all(args, book))
+
         elif command == "add-birthday":
             print(add_birthday(args, book))
+
         elif command == "show-birthday":
             print(show_birthday(args, book))
+
         elif command == "birthdays":
             print(birthdays(args, book))
+
         else:
             print("Invalid command.")
 
